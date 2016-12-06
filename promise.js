@@ -1,41 +1,61 @@
-const PromiseMethods = {
+const EventEmitter = require('events');
+
+
+function createPromise(asyncFunction) {
+  const promise = Object.assign(new EventEmitter(), PromiseSkeleton);
+
+  asyncFunction(createResolve(promise), createReject(promise));
+
+  return promise;
+}
+
+
+const PromiseSkeleton = {
+  status: 'pending',
+  successCallback: () => { },
+  failureCallback: () => { },
+
   then(successCallback) {
-    this.successCallbacks.push(successCallback);
-    return this;
+    this.successCallback = successCallback;
+
+    return createPromise((resolve, reject) => {
+      this.on('resolve', (value) => {
+        const next = this.successCallback(value);
+
+        if (!isPromise(next)) resolve(next);
+        else next.on('resolve', (value) => resolve(value));
+      });
+    });
   },
 
   catch(failureCallback) {
-    this.failureCallback.push(failureCallback);
-    return this;
+    
   },
 };
 
-function newPromise(f) {
-  f(resolve, reject);
 
-  const promise = Object.create(PromiseMethods);
-  return Object.assign(promise, {
-    status: 'pending',
-    successCallbacks: [],
-    failureCallbacka: [],
-  });
+const createResolve = (promise) => (value) => {
+  promise.emit('resolve', value);
+  promise.status = 'fulfilled';
+};
 
-  function resolve(value) {
-    promise.status = 'fulfilled';
-    promise.successCallback(value);
-  }
 
-  function reject(value) {
-    promise.status = 'rejected';
-    promise.failureCallback(value);
-  }
+const createReject = (promise) => (value) => {
+  promise.emit('reject', value);
+  promise.status = 'rejected';
+};
+
+
+function isPromise(obj) {
+  return (
+    obj                    &&
+    obj.then !== undefined &&
+    obj.catch !== undefined
+  );
 }
 
-function waitThenPass(timeout, message) {
-  return newPromise((resolve, reject) => {
-    setTimeout(() => resolve(message), timeout);
-  });
+
+module.exports = {
+  createPromise,
 }
 
-console.log(waitThenPass(3000, 'Hello')
-  .then((message) => console.log(message)));
